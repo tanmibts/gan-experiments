@@ -5,16 +5,19 @@ import matplotlib.pyplot as plt
 
 
 class GAN:
-    def __init__(self, data):
+    def __init__(self, raw_images_data):
         tf.reset_default_graph()
-        self.data = data
-
         # model parameters
         self.Z_DIM = 100
         self.X_DIM = 28
         self.BATCH_SIZE = 16
         self.TRAIN_ITERS = 3000
         self.optimizer = tf.train.AdamOptimizer()
+
+        self.train_writer = None
+
+        self.iterator = None
+        self.prep_data(raw_images_data)
 
         # Placeholder for input images to the discriminator
         self.x_placeholder = tf.placeholder(
@@ -23,6 +26,13 @@ class GAN:
         self.z_placeholder = tf.placeholder(
             tf.float32, [None, self.Z_DIM])
 
+    def prep_data(self, raw_images_data):
+        # TODO: IMPLEMENT THIS WITH A NEW DATA SET
+        dataset = tf.data.Dataset.from_tensor_slices(raw_images_data)
+        self.iterator = dataset.repeat().batch(self.BATCH_SIZE).make_one_shot_iterator()
+
+        # TODO: IMPLEMENT CYCLEGAN?
+
     def train(self):
         # retrieve graph
         g_loss, d_loss = self._get_losses()
@@ -30,31 +40,31 @@ class GAN:
 
         # initialize graph
         sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
 
+        # TensorBoard
+        self.merged = tf.summary.merge_all()
+        self.train_writer = tf.summary.FileWriter('tensorboard/train',
+                                                  sess.graph)
+        sess.run(tf.global_variables_initializer())
+        next_el = self.iterator.get_next()
         for i in range(self.TRAIN_ITERS):
             # generate inputs
             z_batch = np.random.uniform(-1, 1,
                                         size=[self.BATCH_SIZE, self.Z_DIM])
-            real_image_batch = self.data.train.next_batch(self.BATCH_SIZE)
+            real_image_batch = sess.run(next_el)
             real_image_batch = np.reshape(
-                real_image_batch[0], [self.BATCH_SIZE, self.X_DIM, self.X_DIM, 1])
+                real_image_batch, [self.BATCH_SIZE, self.X_DIM, self.X_DIM, 1])
 
             # run through net
-            _, dLoss = sess.run([trainerD, d_loss], feed_dict={
-                                self.z_placeholder: z_batch, self.x_placeholder: real_image_batch})  # Update the discriminator
+            _, dLoss, summary = sess.run([trainerD, d_loss, self.merged], feed_dict={
+                self.z_placeholder: z_batch, self.x_placeholder: real_image_batch})  # Update the discriminator
             _, gLoss = sess.run([trainerG, g_loss], feed_dict={
                                 self.z_placeholder: z_batch})  # Update the generator
+            self.train_writer.add_summary(summary, 1)
 
             # print update
             if i % 200 == 0:
                 print('dLoss: %f\ngLoss: %f\n' % (dLoss, gLoss))
-
-        # sample_image = generator(self.z_placeholder, 1, self.z_dimensions, reuse=True)
-        # z_batch = np.random.uniform(-1, 1, size=[1, self.z_dimensions])
-        # temp = (sess.run(sample_image, feed_dict={self.z_placeholder: z_batch}))
-        # my_i = temp.squeeze()
-        # plt.imshow(my_i, cmap='gray_r')
 
     def _get_losses(self):
         # Dx will hold discriminator prediction probabilities for the real MNIST images
@@ -92,6 +102,18 @@ class GAN:
     def _avg_pool_2x2(x):
         return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    def variable_summaries(var):
+        """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+        with tf.name_scope('summaries'):
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean', mean)
+            with tf.name_scope('stddev'):
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar('stddev', stddev)
+            tf.summary.scalar('max', tf.reduce_max(var))
+            tf.summary.scalar('min', tf.reduce_min(var))
+            tf.summary.histogram('histogram', var)
+
     def _discriminator(self, x_image, reuse=False):
         with tf.variable_scope('discriminator') as scope:
             if (reuse):
@@ -101,6 +123,8 @@ class GAN:
                 'd_wconv1', [5, 5, 1, 8], initializer=tf.truncated_normal_initializer(stddev=0.02))
             b_conv1 = tf.get_variable(
                 'd_bconv1', [8], initializer=tf.constant_initializer(0))
+            GAN.variable_summaries(W_conv1)
+            GAN.variable_summaries(b_conv1)
             h_conv1 = tf.nn.relu(GAN._conv2d(x_image, W_conv1) + b_conv1)
             h_pool1 = GAN._avg_pool_2x2(h_conv1)
 
@@ -128,6 +152,7 @@ class GAN:
 
             # Final Layer
             y_conv = (tf.matmul(h_fc1, W_fc2) + b_fc2)
+
         return y_conv
 
     def _generator(self, z, batch_size, z_dim, reuse=False):
@@ -199,11 +224,19 @@ class GAN:
         return H_conv4
 
 
+def load_local_mnist(images_path, labels_path):
+
+    return images, labels
+
+
 if __name__ == "__main__":
     # import data
-    from tensorflow.examples.tutorials.mnist import input_data
-    mnist = input_data.read_data_sets("MNIST_data/")
-
+    # from tensorflow.examples.tutorials.mnist import input_data
+    # mnist = input_data.read_data_sets("MNIST_data/")
+    from mlxtend.data import loadlocal_mnist
+    train_images, _ = loadlocal_mnist(
+        'MNIST_data/t10k-images-idx3-ubyte', 'MNIST_data/t10k-labels-idx1-ubyte')
+    print('SHAPE IS ', train_images.shape)
     # run model
-    model = GAN(mnist)
+    model = GAN(train_images)
     model.train()
