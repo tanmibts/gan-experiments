@@ -2,7 +2,10 @@ import tensorflow as tf
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-from mlxtend.data import loadlocal_mnist
+
+# implement saving
+# set up tensorboard showing image outputs
+# implement cyclgan
 
 
 class GAN:
@@ -35,19 +38,24 @@ class GAN:
         # TODO: IMPLEMENT CYCLEGAN?
 
     def train(self):
-        # TensorBoard
-        self.merged = tf.summary.merge_all()
-
         # retrieve graph
         g_loss, d_loss = self._get_losses()
         trainerD, trainerG = self._get_trainers(g_loss, d_loss)
 
-        # initialize graph
+        # TensorBoard
+        self.merged = tf.summary.merge_all()
+
+        # saver = tf.train.Saver()
         with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            # if restore:
+            #     print("Restoring model...")
+            #     saver.restore(sess, "/tmp/model.ckpt")
+            # else:
+            #     print("Creating new model...")
             # TensorBoard
             self.train_writer = tf.summary.FileWriter('tensorboard/train',
                                                       sess.graph)
-            sess.run(tf.global_variables_initializer())
             next_el = self.iterator.get_next()
             for i in range(self.TRAIN_ITERS):
                 # generate inputs
@@ -67,8 +75,13 @@ class GAN:
                 # print update
                 if i % 200 == 0:
                     print('dLoss: %f\ngLoss: %f\n' % (dLoss, gLoss))
-                if i == 5:
-                    print('training going ok')
+
+        print("Saving model...")
+        # saver.save(sess, "tmp/model.ckpt")
+        # simple_save(sess,
+        #             'saved_model',
+        #             inputs={"x": x, "y": y},
+        #             outputs={"z": z})
 
     def _get_losses(self):
         # Dx will hold discriminator prediction probabilities for the real MNIST images
@@ -239,11 +252,10 @@ if __name__ == "__main__":
     # import data
     # from tensorflow.examples.tutorials.mnist import input_data
     # mnist = input_data.read_data_sets("MNIST_data/")
-
+    from mlxtend.data import loadlocal_mnist
     train_images, _ = loadlocal_mnist(
         'MNIST_data/t10k-images-idx3-ubyte', 'MNIST_data/t10k-labels-idx1-ubyte')
     print('SHAPE IS ', train_images.shape)
-
     # run model
     model = GAN(train_images)
     model.train()
